@@ -15,41 +15,52 @@ db = SQLAlchemy(app)
 # Define Database Model
 class BedEntry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.String(50), nullable=False)  # Kept as string
-    person_detected = db.Column(db.Boolean, default=False)
+
+    start_time = db.Column(db.DateTime, nullable=False)
+    duration_seconds = db.Column(db.Float, default=0.0)
+
 
 # Initialize Database
 with app.app_context():
     db.create_all()
 
+
 def parse_timestamp_to_date(timestamp_str):
     """Parse ISO timestamp string to date object"""
     return datetime.fromisoformat(timestamp_str).date()
+
 
 @app.route('/upload', methods=['POST'])
 def upload_data():
     """Receives data from Raspberry Pi and stores it in the database."""
     data = request.json
-    if not data or "timestamp" not in data or "person_detected" not in data:
+    if not data or "start_time" not in data or "duration_seconds" not in data:
         return jsonify({"error": "Invalid data format"}), 400
     
     try:
-        # Validate timestamp format but store as string
-        datetime.fromisoformat(data["timestamp"])
-        entry = BedEntry(timestamp=data["timestamp"], person_detected=data["person_detected"])
-        db.session.add(entry)
-        db.session.commit()
-    except ValueError as e:
-        return jsonify({"error": f"Invalid timestamp format: {str(e)}"}), 400
+
+        start_time = datetime.fromisoformat(data["start_time"])
+        duration = float(data["duration_seconds"])
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid data types"}), 400
+
+    entry = BedEntry(start_time=start_time, duration_seconds=duration)
+    db.session.add(entry)
+    db.session.commit()
+
     
     return jsonify({"message": "Data received"}), 200
 
+# Retrieve endpoint
 @app.route('/data', methods=['GET'])
 def get_data():
     """Returns all stored bed-tracking data."""
     entries = BedEntry.query.all()
     return jsonify([
-        {"timestamp": entry.timestamp, "person_detected": entry.person_detected} 
+        {
+            "start_time": entry.start_time.isoformat(),
+            "duration_seconds": entry.duration_seconds
+        }
         for entry in entries
     ])
 
